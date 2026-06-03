@@ -64,7 +64,6 @@ class AntigravityUsageConfigFlow(ConfigFlow, domain=DOMAIN):
         # Build OAuth URL
         params = urlencode(
             {
-                "code": "true",
                 "client_id": OAUTH_CLIENT_ID,
                 "response_type": "code",
                 "redirect_uri": OAUTH_REDIRECT_URI,
@@ -221,7 +220,6 @@ class AntigravityUsageConfigFlow(ConfigFlow, domain=DOMAIN):
         # Build OAuth URL
         params = urlencode(
             {
-                "code": "true",
                 "client_id": OAUTH_CLIENT_ID,
                 "response_type": "code",
                 "redirect_uri": OAUTH_REDIRECT_URI,
