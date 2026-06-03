@@ -3,22 +3,22 @@
     "step": {
       "user": {
         "title": "Authenticate with Antigravity",
-        "description": "To authenticate, [open this link]({url}) to log in with Google.\n\nAfter authorizing, paste the authorization code below.\n\nNote: The code may include a '#' character - paste the entire string.",
+        "description": "Provide the absolute path to your `oauth_creds.json` file on the Home Assistant server (e.g., `/config/oauth_creds.json`).",
         "data": {
-          "auth_code": "Authorization Code"
+          "auth_file": "Authentication File Path"
         }
       },
       "reauth_confirm": {
         "title": "Re-authenticate with Antigravity",
-        "description": "Your Antigravity authentication has expired or been revoked. [Open this link]({url}) to log in again with Google.\n\nAfter authorizing, paste the new authorization code below.",
+        "description": "Your Antigravity authentication has expired or failed. Please check your `oauth_creds.json` file and provide its path.",
         "data": {
-          "auth_code": "Authorization Code"
+          "auth_file": "Authentication File Path"
         }
       }
     },
     "error": {
-      "missing_code": "Please enter the authorization code",
-      "exchange_failed": "Failed to exchange code for tokens. Please try again."
+      "auth_file_unreadable": "Could not read or parse the JSON file at the specified path.",
+      "missing_tokens": "The provided file is missing 'access_token' or 'refresh_token'."
     },
     "abort": {
       "already_configured": "Antigravity Usage is already configured",

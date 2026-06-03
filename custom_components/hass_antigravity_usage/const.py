@@ -14,9 +14,11 @@ USAGE_API_URL = "https://api.antigravity.google/v1internal/usage"
 PROFILE_API_URL = "https://api.antigravity.google/v1internal/profile"
 
 # Defaults
+DEFAULT_AUTH_FILE = "/config/.storage/oauth_creds.json"
 DEFAULT_UPDATE_INTERVAL = 300  # seconds
 
 # Config keys
+CONF_AUTH_FILE = "auth_file"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_EXPIRES_AT = "expires_at"
