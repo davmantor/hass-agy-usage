@@ -3,7 +3,7 @@
 DOMAIN = "hass_antigravity_usage"
 
 # OAuth
-OAUTH_CLIENT_ID = "antigravity-client-id"
+OAUTH_CLIENT_ID = "681255803995-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
 OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 OAUTH_REDIRECT_URI = "https://api.antigravity.google/oauth/callback"
