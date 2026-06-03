@@ -83,8 +83,8 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             session = aiohttp_client.async_get_clientsession(self.hass)
-            resp = await session.get(
-                USAGE_API_URL, headers=headers, timeout=aiohttp.ClientTimeout(total=15)
+            resp = await session.post(
+                USAGE_API_URL, headers=headers, json={}, timeout=aiohttp.ClientTimeout(total=15)
             )
             if resp.status == 401:
                 raise ConfigEntryAuthFailed("Authentication failed - token may be invalid")
@@ -109,6 +109,7 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
             "client_id": OAUTH_CLIENT_ID,
+            "client_secret": OAUTH_CLIENT_SECRET,
         }
 
         try:
@@ -141,37 +142,23 @@ def _parse_usage(raw: dict[str, Any]) -> dict[str, Any]:
     """Parse raw API response into flat sensor data dict."""
     data: dict[str, Any] = {}
 
-    five_hour = raw.get("five_hour")
-    if five_hour:
-        data["session_usage_percent"] = five_hour.get("utilization")
-        data["session_reset_time"] = five_hour.get("resets_at")
-
-    seven_day = raw.get("seven_day")
-    if seven_day:
-        utilization = seven_day.get("utilization")
-        reset_time = seven_day.get("resets_at")
-        data["week_usage_percent"] = utilization
-        data["week_reset_time"] = reset_time
-        if utilization is not None and reset_time:
-            try:
-                reset_dt = datetime.fromisoformat(reset_time)
-                now = datetime.now(UTC)
-                week_seconds = 7 * 24 * 60 * 60
-                elapsed = week_seconds - (reset_dt - now).total_seconds()
-                percent_elapsed = (elapsed / week_seconds) * 100
-                data["week_usage_pace"] = round(utilization - percent_elapsed, 1)
-            except (ValueError, TypeError):
-                pass
-
-    extra = raw.get("extra_usage")
-    if extra:
-        data["extra_usage_enabled"] = extra.get("is_enabled", False)
-        data["extra_usage_percent"] = extra.get("utilization")
-        data["extra_usage_credits"] = (
-            extra["used_credits"] / 100 if extra.get("used_credits") is not None else None
-        )
-        data["extra_usage_limit"] = (
-            extra["monthly_limit"] / 100 if extra.get("monthly_limit") is not None else None
-        )
+    cascade_data = raw.get("cascadeModelConfigData", {})
+    client_configs = cascade_data.get("clientModelConfigs", [])
+    
+    for model in client_configs:
+        model_id = model.get("modelOrAlias", {}).get("model", "unknown")
+        label = model.get("label", model.get("displayName", model_id))
+        quota_info = model.get("quotaInfo", {})
+        remaining_fraction = quota_info.get("remainingFraction")
+        
+        if remaining_fraction is not None:
+            percent = round(remaining_fraction * 100, 1)
+            key = f"model_{model_id.replace('-', '_').replace('.', '_')}"
+            
+            data[key] = {
+                "name": label,
+                "value": percent,
+                "reset_time": quota_info.get("resetTime")
+            }
 
     return data

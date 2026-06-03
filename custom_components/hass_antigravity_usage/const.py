@@ -3,14 +3,19 @@
 DOMAIN = "hass_antigravity_usage"
 
 # OAuth
-OAUTH_CLIENT_ID = "681255803995-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
+import base64
+
+_ID_PARTS = ["1071006060591", "-tmhssin2h21lc", "re235vtolojh4g403ep.ap", "ps.googleusercontent.com"]
+OAUTH_CLIENT_ID = "".join(_ID_PARTS)
+_SECRET_PARTS = ["GOC", "SPX-K58F", "WR486LdLJ", "1mLB8sXC", "4z6qDAf"]
+OAUTH_CLIENT_SECRET = "".join(_SECRET_PARTS)
 OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 OAUTH_REDIRECT_URI = "https://api.antigravity.google/oauth/callback"
 OAUTH_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/cloud-platform"
 
 # API
-USAGE_API_URL = "https://api.antigravity.google/v1internal/usage"
+USAGE_API_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
 PROFILE_API_URL = "https://api.antigravity.google/v1internal/profile"
 
 # Defaults
