@@ -121,7 +121,8 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         tier_info = lca_data.get("currentTier", {})
         tier = tier_info.get("name") or tier_info.get("id")
-        return {"models": _parse_usage(raw), "tier": tier}
+        models = _parse_usage(raw)
+        return {"models": models, "tier": tier, "reset_groups": _build_reset_groups(models)}
 
     async def _ensure_valid_token(self) -> None:
         """Refresh the access token if expired."""
@@ -169,6 +170,7 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 def _parse_usage(raw: dict[str, Any]) -> dict[str, Any]:
     """Parse raw API response into flat sensor data dict."""
     data: dict[str, Any] = {}
+    seen_names: set[str] = set()
 
     for model_id, model_info in raw.get("models", {}).items():
         # Skip internal/autocomplete-only models
@@ -188,13 +190,50 @@ def _parse_usage(raw: dict[str, Any]) -> dict[str, Any]:
         if remaining_fraction is None:
             continue
 
+        reset_time = quota_info.get("resetTime")
+        seconds_until_reset = None
+        if reset_time:
+            try:
+                reset_dt = datetime.fromisoformat(reset_time.replace("Z", "+00:00"))
+                seconds_until_reset = max(0, int((reset_dt - datetime.now(UTC)).total_seconds()))
+            except ValueError:
+                pass
+
         label = model_info.get("displayName") or model_info.get("label") or model_id
+        if label in seen_names:
+            continue
+        seen_names.add(label)
+
         key = f"model_{model_id.replace('-', '_').replace('.', '_')}"
         data[key] = {
             "name": label,
             "value": round(remaining_fraction * 100, 1),
-            "reset_time": quota_info.get("resetTime"),
+            "reset_time": reset_time,
+            "seconds_until_reset": seconds_until_reset,
             "is_exhausted": remaining_fraction == 0,
         }
 
     return data
+
+
+def _build_reset_groups(models: dict[str, Any]) -> list[dict[str, Any]]:
+    """Group models by reset time and derive a display name per group."""
+    groups: dict[str, set[str]] = {}
+    for key, info in models.items():
+        rt = info.get("reset_time")
+        if not rt:
+            continue
+        if rt not in groups:
+            groups[rt] = set()
+        if "gemini" in key:
+            groups[rt].add("Gemini")
+        elif "claude" in key:
+            groups[rt].add("Claude")
+        elif "gpt" in key:
+            groups[rt].add("GPT")
+
+    return [
+        {"name": " & ".join(sorted(families)) + " Reset", "reset_time": rt}
+        for rt, families in groups.items()
+        if families
+    ]

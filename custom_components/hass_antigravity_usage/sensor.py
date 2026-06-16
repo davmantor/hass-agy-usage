@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
@@ -33,6 +35,8 @@ async def async_setup_entry(
     if coordinator.data:
         if coordinator.data.get("tier") is not None:
             entities.append(AntigravityTierSensor(coordinator, entry))
+        for group in coordinator.data.get("reset_groups", []):
+            entities.append(AntigravityResetSensor(coordinator, entry, group["name"]))
         for key, info in coordinator.data.get("models", {}).items():
             entities.append(AntigravityModelSensor(coordinator, entry, key, info["name"]))
 
@@ -109,7 +113,61 @@ class AntigravityModelSensor(CoordinatorEntity[AntigravityUsageCoordinator], Sen
         attrs = {"is_exhausted": info.get("is_exhausted", False)}
         if info.get("reset_time"):
             attrs["reset_time"] = info["reset_time"]
+        if info.get("seconds_until_reset") is not None:
+            attrs["seconds_until_reset"] = info["seconds_until_reset"]
         return attrs
+
+
+class AntigravityResetSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
+    """A sensor showing the next quota reset time for a model group."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:timer-outline"
+
+    def __init__(
+        self,
+        coordinator: AntigravityUsageCoordinator,
+        entry: AntigravityUsageConfigEntry,
+        group_name: str,
+    ) -> None:
+        """Initialize the reset sensor."""
+        super().__init__(coordinator)
+        self._group_name = group_name
+        self._attr_unique_id = f"{entry.entry_id}_reset_{group_name.lower().replace(' ', '_')}"
+        self._attr_name = group_name
+
+        account_name = entry.data.get(CONF_ACCOUNT_NAME)
+        subscription_level = entry.data.get(CONF_SUBSCRIPTION_LEVEL)
+
+        device_name_parts = ["Antigravity Usage"]
+        if account_name:
+            device_name_parts.append(f"({account_name}")
+            if subscription_level:
+                device_name_parts.append(f"- {subscription_level})")
+            else:
+                device_name_parts[-1] += ")"
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=" ".join(device_name_parts),
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the reset datetime for this group."""
+        if self.coordinator.data is None:
+            return None
+        for group in self.coordinator.data.get("reset_groups", []):
+            if group["name"] == self._group_name:
+                try:
+                    return datetime.fromisoformat(
+                        group["reset_time"].replace("Z", "+00:00")
+                    )
+                except (ValueError, AttributeError):
+                    return None
+        return None
 
 
 class AntigravityTierSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
