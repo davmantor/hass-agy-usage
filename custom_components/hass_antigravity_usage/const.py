@@ -30,35 +30,3 @@ CONF_EXPIRES_AT = "expires_at"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_ACCOUNT_NAME = "account_name"
 CONF_SUBSCRIPTION_LEVEL = "subscription_level"
-
-# Sensor definitions: (key, name, unit, icon, device_class)
-SENSOR_DEFINITIONS = [
-    ("session_usage_percent", "Session Usage", "%", "mdi:timer-sand", None),
-    (
-        "session_reset_time",
-        "Session Reset Time",
-        None,
-        "mdi:timer-refresh",
-        "timestamp",
-    ),
-    ("week_usage_percent", "Week Usage", "%", "mdi:calendar-week", None),
-    ("week_usage_pace", "Week Usage Pace", "%", "mdi:speedometer", None),
-    ("week_reset_time", "Weekly Reset Time", None, "mdi:calendar-clock", "timestamp"),
-    ("extra_usage_enabled", "Extra Usage Enabled", None, "mdi:toggle-switch", None),
-    ("extra_usage_percent", "Extra Usage", "%", "mdi:credit-card", None),
-    (
-        "extra_usage_credits",
-        "Extra Usage Credits",
-        "credits",
-        "mdi:credit-card-outline",
-        "monetary"
-    ),
-    (
-        "extra_usage_limit",
-        "Extra Usage Limit",
-        "credits",
-        "mdi:credit-card-settings",
-        "monetary"
-    ),
-    ("api_error", "API Error", "errors", "mdi:alert-circle", None),
-]

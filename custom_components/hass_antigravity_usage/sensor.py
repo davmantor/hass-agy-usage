@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
@@ -21,10 +18,7 @@ from .const import (
     CONF_ACCOUNT_NAME,
     CONF_SUBSCRIPTION_LEVEL,
     DOMAIN,
-    SENSOR_DEFINITIONS,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(

@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
     OAUTH_TOKEN_URL,
     USAGE_API_URL,
 )
