@@ -28,13 +28,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up Antigravity Usage sensors."""
     coordinator = entry.runtime_data
-    
-    # We create entities for all models present in the first data fetch
-    entities = []
+
+    entities: list[SensorEntity] = []
     if coordinator.data:
-        for key, info in coordinator.data.items():
+        if coordinator.data.get("tier") is not None:
+            entities.append(AntigravityTierSensor(coordinator, entry))
+        for key, info in coordinator.data.get("models", {}).items():
             entities.append(AntigravityModelSensor(coordinator, entry, key, info["name"]))
-    
+
     async_add_entities(entities)
 
 
@@ -85,14 +86,14 @@ class AntigravityModelSensor(CoordinatorEntity[AntigravityUsageCoordinator], Sen
             return False
         if self.coordinator.data is None:
             return False
-        return self._key in self.coordinator.data
+        return self._key in self.coordinator.data.get("models", {})
 
     @property
     def native_value(self) -> Any:
         """Return the sensor value."""
         if self.coordinator.data is None:
             return None
-        info = self.coordinator.data.get(self._key)
+        info = self.coordinator.data.get("models", {}).get(self._key)
         if info:
             return info.get("value")
         return None
@@ -102,8 +103,53 @@ class AntigravityModelSensor(CoordinatorEntity[AntigravityUsageCoordinator], Sen
         """Return the state attributes."""
         if self.coordinator.data is None:
             return {}
-        info = self.coordinator.data.get(self._key)
-        if info and "reset_time" in info:
-            return {"reset_time": info["reset_time"]}
-        return {}
+        info = self.coordinator.data.get("models", {}).get(self._key)
+        if not info:
+            return {}
+        attrs = {"is_exhausted": info.get("is_exhausted", False)}
+        if info.get("reset_time"):
+            attrs["reset_time"] = info["reset_time"]
+        return attrs
+
+
+class AntigravityTierSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
+    """A sensor reporting the current Antigravity subscription tier."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:account-badge"
+
+    def __init__(
+        self,
+        coordinator: AntigravityUsageCoordinator,
+        entry: AntigravityUsageConfigEntry,
+    ) -> None:
+        """Initialize the tier sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_tier"
+        self._attr_name = "Subscription Tier"
+
+        account_name = entry.data.get(CONF_ACCOUNT_NAME)
+        subscription_level = entry.data.get(CONF_SUBSCRIPTION_LEVEL)
+
+        device_name_parts = ["Antigravity Usage"]
+        if account_name:
+            device_name_parts.append(f"({account_name}")
+            if subscription_level:
+                device_name_parts.append(f"- {subscription_level})")
+            else:
+                device_name_parts[-1] += ")"
+        device_name = " ".join(device_name_parts)
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=device_name,
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the subscription tier name."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get("tier")
 

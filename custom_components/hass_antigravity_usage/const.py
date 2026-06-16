@@ -15,8 +15,15 @@ OAUTH_REDIRECT_URI = "https://api.antigravity.google/oauth/callback"
 OAUTH_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/cloud-platform"
 
 # API
+LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
 USAGE_API_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
 PROFILE_API_URL = "https://api.antigravity.google/v1internal/profile"
+
+CCPA_METADATA = {
+    "ideType": "ANTIGRAVITY",
+    "platform": "PLATFORM_UNSPECIFIED",
+    "pluginType": "GEMINI",
+}
 
 # Defaults
 DEFAULT_AUTH_FILE = "/config/.storage/oauth_creds.json"

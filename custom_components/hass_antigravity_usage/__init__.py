@@ -16,12 +16,14 @@ from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CCPA_METADATA,
     CONF_ACCESS_TOKEN,
     CONF_EXPIRES_AT,
     CONF_REFRESH_TOKEN,
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    LOAD_CODE_ASSIST_URL,
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
     OAUTH_TOKEN_URL,
@@ -80,21 +82,46 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         access_token = self.config_entry.data[CONF_ACCESS_TOKEN]
         headers = {
             "Authorization": f"Bearer {access_token}",
+            "User-Agent": "antigravity",
         }
 
         try:
             session = aiohttp_client.async_get_clientsession(self.hass)
-            resp = await session.post(
-                USAGE_API_URL, headers=headers, json={}, timeout=aiohttp.ClientTimeout(total=15)
+
+            # Step 1: loadCodeAssist to obtain the project ID
+            lca_resp = await session.post(
+                LOAD_CODE_ASSIST_URL,
+                headers=headers,
+                json={"metadata": CCPA_METADATA},
+                timeout=aiohttp.ClientTimeout(total=15),
             )
-            if resp.status == 401:
+            if lca_resp.status == 401:
                 raise ConfigEntryAuthFailed("Authentication failed - token may be invalid")
-            resp.raise_for_status()
-            raw = await resp.json()
+            lca_resp.raise_for_status()
+            lca_data = await lca_resp.json()
+
+            project = lca_data.get("cloudaicompanionProject")
+            if isinstance(project, dict):
+                project = project.get("id")
+
+            # Step 2: fetchAvailableModels using the project ID
+            body = {"project": project} if project else {}
+            fam_resp = await session.post(
+                USAGE_API_URL,
+                headers=headers,
+                json=body,
+                timeout=aiohttp.ClientTimeout(total=15),
+            )
+            if fam_resp.status == 401:
+                raise ConfigEntryAuthFailed("Authentication failed - token may be invalid")
+            fam_resp.raise_for_status()
+            raw = await fam_resp.json()
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Error fetching usage data: {err}") from err
 
-        return _parse_usage(raw)
+        tier_info = lca_data.get("currentTier", {})
+        tier = tier_info.get("name") or tier_info.get("id")
+        return {"models": _parse_usage(raw), "tier": tier}
 
     async def _ensure_valid_token(self) -> None:
         """Refresh the access token if expired."""
@@ -143,23 +170,31 @@ def _parse_usage(raw: dict[str, Any]) -> dict[str, Any]:
     """Parse raw API response into flat sensor data dict."""
     data: dict[str, Any] = {}
 
-    cascade_data = raw.get("cascadeModelConfigData", {})
-    client_configs = cascade_data.get("clientModelConfigs", [])
-    
-    for model in client_configs:
-        model_id = model.get("modelOrAlias", {}).get("model", "unknown")
-        label = model.get("label", model.get("displayName", model_id))
-        quota_info = model.get("quotaInfo", {})
+    for model_id, model_info in raw.get("models", {}).items():
+        # Skip internal/autocomplete-only models
+        if (
+            model_id.startswith(("chat_", "tab_", "rev"))
+            or "image" in model_id
+            or "mquery" in model_id
+            or "lite" in model_id
+        ):
+            continue
+
+        quota_info = model_info.get("quotaInfo")
+        if not quota_info:
+            continue
+
         remaining_fraction = quota_info.get("remainingFraction")
-        
-        if remaining_fraction is not None:
-            percent = round(remaining_fraction * 100, 1)
-            key = f"model_{model_id.replace('-', '_').replace('.', '_')}"
-            
-            data[key] = {
-                "name": label,
-                "value": percent,
-                "reset_time": quota_info.get("resetTime")
-            }
+        if remaining_fraction is None:
+            continue
+
+        label = model_info.get("displayName") or model_info.get("label") or model_id
+        key = f"model_{model_id.replace('-', '_').replace('.', '_')}"
+        data[key] = {
+            "name": label,
+            "value": round(remaining_fraction * 100, 1),
+            "reset_time": quota_info.get("resetTime"),
+            "is_exhausted": remaining_fraction == 0,
+        }
 
     return data
