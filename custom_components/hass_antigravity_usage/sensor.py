@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -35,16 +35,41 @@ async def async_setup_entry(
     if coordinator.data:
         if coordinator.data.get("tier") is not None:
             entities.append(AntigravityTierSensor(coordinator, entry))
-        for group in coordinator.data.get("reset_groups", []):
-            entities.append(AntigravityResetSensor(coordinator, entry, group["name"]))
-        for key, info in coordinator.data.get("models", {}).items():
-            entities.append(AntigravityModelSensor(coordinator, entry, key, info["name"]))
+
+        for group in coordinator.data.get("groups", []):
+            key = group["key"]
+            name = group["name"]
+            if "weekly_remaining" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "weekly_remaining", f"{name} Weekly", is_timestamp=False))
+            if "fiveh_remaining" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "fiveh_remaining", f"{name} 5h", is_timestamp=False))
+            if "weekly_reset_time" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "weekly_reset_time", f"{name} Weekly Reset", is_timestamp=True))
+            if "fiveh_reset_time" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "fiveh_reset_time", f"{name} 5h Reset", is_timestamp=True))
 
     async_add_entities(entities)
 
 
-class AntigravityModelSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
-    """A sensor for a Antigravity usage metric."""
+def _device_info(entry: AntigravityUsageConfigEntry) -> DeviceInfo:
+    account_name = entry.data.get(CONF_ACCOUNT_NAME)
+    subscription_level = entry.data.get(CONF_SUBSCRIPTION_LEVEL)
+    parts = ["Antigravity Usage"]
+    if account_name:
+        parts.append(f"({account_name}")
+        if subscription_level:
+            parts.append(f"- {subscription_level})")
+        else:
+            parts[-1] += ")"
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=" ".join(parts),
+        entry_type=DeviceEntryType.SERVICE,
+    )
+
+
+class AntigravityGroupSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
+    """Sensor for one quota window (weekly or 5h) of one model group."""
 
     _attr_has_entity_name = True
 
@@ -52,126 +77,59 @@ class AntigravityModelSensor(CoordinatorEntity[AntigravityUsageCoordinator], Sen
         self,
         coordinator: AntigravityUsageCoordinator,
         entry: AntigravityUsageConfigEntry,
-        key: str,
+        group_key: str,
+        field: str,
         name: str,
+        *,
+        is_timestamp: bool,
     ) -> None:
-        """Initialize the sensor."""
         super().__init__(coordinator)
-        self._key = key
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._group_key = group_key
+        self._field = field
+        self._is_timestamp = is_timestamp
+        self._attr_unique_id = f"{entry.entry_id}_{group_key}_{field}"
         self._attr_name = name
-        self._attr_native_unit_of_measurement = "%"
-        self._attr_icon = "mdi:brain"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_device_info = _device_info(entry)
 
-        # Build device name
-        account_name = entry.data.get(CONF_ACCOUNT_NAME)
-        subscription_level = entry.data.get(CONF_SUBSCRIPTION_LEVEL)
+        if is_timestamp:
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
+            self._attr_icon = "mdi:timer-outline"
+        else:
+            self._attr_native_unit_of_measurement = "%"
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_icon = "mdi:gauge"
 
-        device_name_parts = ["Antigravity Usage"]
-        if account_name:
-            device_name_parts.append(f"({account_name}")
-            if subscription_level:
-                device_name_parts.append(f"- {subscription_level})")
-            else:
-                device_name_parts[-1] += ")"
-        device_name = " ".join(device_name_parts)
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=device_name,
-            entry_type=DeviceEntryType.SERVICE,
-        )
+    def _group(self) -> dict[str, Any] | None:
+        if self.coordinator.data is None:
+            return None
+        for group in self.coordinator.data.get("groups", []):
+            if group["key"] == self._group_key:
+                return group
+        return None
 
     @property
     def available(self) -> bool:
-        """Return True if the sensor value is present in coordinator data."""
-        if not super().available:
+        if not super().available or self.coordinator.data is None:
             return False
-        if self.coordinator.data is None:
-            return False
-        return self._key in self.coordinator.data.get("models", {})
+        g = self._group()
+        return g is not None and g.get(self._field) is not None
 
     @property
     def native_value(self) -> Any:
-        """Return the sensor value."""
-        if self.coordinator.data is None:
+        g = self._group()
+        if g is None:
             return None
-        info = self.coordinator.data.get("models", {}).get(self._key)
-        if info:
-            return info.get("value")
-        return None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
-        if self.coordinator.data is None:
-            return {}
-        info = self.coordinator.data.get("models", {}).get(self._key)
-        if not info:
-            return {}
-        attrs = {"is_exhausted": info.get("is_exhausted", False)}
-        if info.get("reset_time"):
-            attrs["reset_time"] = info["reset_time"]
-        if info.get("seconds_until_reset") is not None:
-            attrs["seconds_until_reset"] = info["seconds_until_reset"]
-        return attrs
-
-
-class AntigravityResetSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
-    """A sensor showing the next quota reset time for a model group."""
-
-    _attr_has_entity_name = True
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_icon = "mdi:timer-outline"
-
-    def __init__(
-        self,
-        coordinator: AntigravityUsageCoordinator,
-        entry: AntigravityUsageConfigEntry,
-        group_name: str,
-    ) -> None:
-        """Initialize the reset sensor."""
-        super().__init__(coordinator)
-        self._group_name = group_name
-        self._attr_unique_id = f"{entry.entry_id}_reset_{group_name.lower().replace(' ', '_')}"
-        self._attr_name = group_name
-
-        account_name = entry.data.get(CONF_ACCOUNT_NAME)
-        subscription_level = entry.data.get(CONF_SUBSCRIPTION_LEVEL)
-
-        device_name_parts = ["Antigravity Usage"]
-        if account_name:
-            device_name_parts.append(f"({account_name}")
-            if subscription_level:
-                device_name_parts.append(f"- {subscription_level})")
-            else:
-                device_name_parts[-1] += ")"
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=" ".join(device_name_parts),
-            entry_type=DeviceEntryType.SERVICE,
-        )
-
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the reset datetime for this group."""
-        if self.coordinator.data is None:
-            return None
-        for group in self.coordinator.data.get("reset_groups", []):
-            if group["name"] == self._group_name:
-                try:
-                    return datetime.fromisoformat(
-                        group["reset_time"].replace("Z", "+00:00")
-                    )
-                except (ValueError, AttributeError):
-                    return None
-        return None
+        val = g.get(self._field)
+        if val is not None and self._is_timestamp:
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                return None
+        return val
 
 
 class AntigravityTierSensor(CoordinatorEntity[AntigravityUsageCoordinator], SensorEntity):
-    """A sensor reporting the current Antigravity subscription tier."""
+    """Sensor reporting the current Antigravity subscription tier."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:account-badge"
@@ -181,33 +139,13 @@ class AntigravityTierSensor(CoordinatorEntity[AntigravityUsageCoordinator], Sens
         coordinator: AntigravityUsageCoordinator,
         entry: AntigravityUsageConfigEntry,
     ) -> None:
-        """Initialize the tier sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_tier"
         self._attr_name = "Subscription Tier"
-
-        account_name = entry.data.get(CONF_ACCOUNT_NAME)
-        subscription_level = entry.data.get(CONF_SUBSCRIPTION_LEVEL)
-
-        device_name_parts = ["Antigravity Usage"]
-        if account_name:
-            device_name_parts.append(f"({account_name}")
-            if subscription_level:
-                device_name_parts.append(f"- {subscription_level})")
-            else:
-                device_name_parts[-1] += ")"
-        device_name = " ".join(device_name_parts)
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=device_name,
-            entry_type=DeviceEntryType.SERVICE,
-        )
+        self._attr_device_info = _device_info(entry)
 
     @property
     def native_value(self) -> str | None:
-        """Return the subscription tier name."""
         if self.coordinator.data is None:
             return None
         return self.coordinator.data.get("tier")
-

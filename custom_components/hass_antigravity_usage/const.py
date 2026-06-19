@@ -16,7 +16,7 @@ OAUTH_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googl
 
 # API
 LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
-USAGE_API_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+QUOTA_SUMMARY_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
 PROFILE_API_URL = "https://api.antigravity.google/v1internal/profile"
 
 CCPA_METADATA = {

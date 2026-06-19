@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import aiohttp
@@ -27,7 +27,7 @@ from .const import (
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
     OAUTH_TOKEN_URL,
-    USAGE_API_URL,
+    QUOTA_SUMMARY_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,12 +83,13 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         headers = {
             "Authorization": f"Bearer {access_token}",
             "User-Agent": "antigravity",
+            "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
         }
 
         try:
             session = aiohttp_client.async_get_clientsession(self.hass)
 
-            # Step 1: loadCodeAssist to obtain the project ID
+            # Step 1: loadCodeAssist to get project ID and current tier
             lca_resp = await session.post(
                 LOAD_CODE_ASSIST_URL,
                 headers=headers,
@@ -104,25 +105,24 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if isinstance(project, dict):
                 project = project.get("id")
 
-            # Step 2: fetchAvailableModels using the project ID
+            # Step 2: retrieveUserQuotaSummary for grouped weekly/5h quota data
             body = {"project": project} if project else {}
-            fam_resp = await session.post(
-                USAGE_API_URL,
+            quota_resp = await session.post(
+                QUOTA_SUMMARY_URL,
                 headers=headers,
                 json=body,
                 timeout=aiohttp.ClientTimeout(total=15),
             )
-            if fam_resp.status == 401:
+            if quota_resp.status == 401:
                 raise ConfigEntryAuthFailed("Authentication failed - token may be invalid")
-            fam_resp.raise_for_status()
-            raw = await fam_resp.json()
+            quota_resp.raise_for_status()
+            quota_data = await quota_resp.json()
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Error fetching usage data: {err}") from err
 
         tier_info = lca_data.get("currentTier", {})
         tier = tier_info.get("name") or tier_info.get("id")
-        models = _parse_usage(raw)
-        return {"models": models, "tier": tier, "reset_groups": _build_reset_groups(models)}
+        return {"groups": _parse_quota_summary(quota_data), "tier": tier}
 
     async def _ensure_valid_token(self) -> None:
         """Refresh the access token if expired."""
@@ -167,73 +167,41 @@ class AntigravityUsageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
 
 
-def _parse_usage(raw: dict[str, Any]) -> dict[str, Any]:
-    """Parse raw API response into flat sensor data dict."""
-    data: dict[str, Any] = {}
-    seen_names: set[str] = set()
-
-    for model_id, model_info in raw.get("models", {}).items():
-        # Skip internal/autocomplete-only models
-        if (
-            model_id.startswith(("chat_", "tab_", "rev"))
-            or "image" in model_id
-            or "mquery" in model_id
-            or "lite" in model_id
-        ):
-            continue
-
-        quota_info = model_info.get("quotaInfo")
-        if not quota_info:
-            continue
-
-        remaining_fraction = quota_info.get("remainingFraction")
-        if remaining_fraction is None:
-            continue
-
-        reset_time = quota_info.get("resetTime")
-        seconds_until_reset = None
-        if reset_time:
-            try:
-                reset_dt = datetime.fromisoformat(reset_time.replace("Z", "+00:00"))
-                seconds_until_reset = max(0, int((reset_dt - datetime.now(UTC)).total_seconds()))
-            except ValueError:
-                pass
-
-        label = model_info.get("displayName") or model_info.get("label") or model_id
-        if label in seen_names:
-            continue
-        seen_names.add(label)
-
-        key = f"model_{model_id.replace('-', '_').replace('.', '_')}"
-        data[key] = {
-            "name": label,
-            "value": round(remaining_fraction * 100, 1),
-            "reset_time": reset_time,
-            "seconds_until_reset": seconds_until_reset,
-            "is_exhausted": remaining_fraction == 0,
-        }
-
-    return data
+_GROUP_NAMES: dict[str, str] = {
+    "gemini": "Gemini Models",
+    "3p": "Third-Party Models",
+}
 
 
-def _build_reset_groups(models: dict[str, Any]) -> list[dict[str, Any]]:
-    """Group models by reset time and derive a display name per group."""
-    groups: dict[str, set[str]] = {}
-    for key, info in models.items():
-        rt = info.get("reset_time")
-        if not rt:
-            continue
-        if rt not in groups:
-            groups[rt] = set()
-        if "gemini" in key:
-            groups[rt].add("Gemini")
-        elif "claude" in key:
-            groups[rt].add("Claude")
-        elif "gpt" in key:
-            groups[rt].add("GPT")
+def _parse_quota_summary(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Parse retrieveUserQuotaSummary response into a list of group dicts."""
+    groups = []
+    for group in raw.get("groups", []):
+        buckets = group.get("buckets", [])
 
-    return [
-        {"name": " & ".join(sorted(families)) + " Reset", "reset_time": rt}
-        for rt, families in groups.items()
-        if families
-    ]
+        # Derive a stable key from the first bucket ID prefix (e.g. "gemini-weekly" → "gemini")
+        key = "unknown"
+        if buckets:
+            first_id = buckets[0].get("bucketId", "")
+            key = first_id.rsplit("-", 1)[0] if "-" in first_id else first_id
+
+        name = _GROUP_NAMES.get(key, group.get("displayName", key))
+        entry: dict[str, Any] = {"key": key, "name": name}
+
+        for bucket in buckets:
+            window = bucket.get("window", "")
+            rf = bucket.get("remainingFraction")
+            rt = bucket.get("resetTime")
+            if window == "weekly":
+                if rf is not None:
+                    entry["weekly_remaining"] = round(rf * 100, 1)
+                if rt:
+                    entry["weekly_reset_time"] = rt
+            elif window == "5h":
+                if rf is not None:
+                    entry["fiveh_remaining"] = round(rf * 100, 1)
+                if rt:
+                    entry["fiveh_reset_time"] = rt
+
+        groups.append(entry)
+    return groups
