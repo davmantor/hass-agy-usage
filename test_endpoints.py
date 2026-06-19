@@ -20,10 +20,12 @@ SECRET_PARTS = ["GOC", "SPX-K58F", "WR486LdLJ", "1mLB8sXC", "4z6qDAf"]
 CLIENT_SECRET = "".join(SECRET_PARTS)
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
-FETCH_MODELS_URL = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
-RETRIEVE_QUOTA_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
-RETRIEVE_QUOTA_SUMMARY_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+LOAD_CODE_ASSIST_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+FETCH_MODELS_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+RETRIEVE_QUOTA_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
+RETRIEVE_QUOTA_SUMMARY_URL = (
+    "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+)
 
 CCPA_METADATA = {
     "ideType": "ANTIGRAVITY",

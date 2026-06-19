@@ -15,8 +15,10 @@ OAUTH_REDIRECT_URI = "https://api.antigravity.google/oauth/callback"
 OAUTH_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/cloud-platform"
 
 # API
-LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
-QUOTA_SUMMARY_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+LOAD_CODE_ASSIST_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+QUOTA_SUMMARY_URL = (
+    "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+)
 PROFILE_API_URL = "https://api.antigravity.google/v1internal/profile"
 
 CCPA_METADATA = {
