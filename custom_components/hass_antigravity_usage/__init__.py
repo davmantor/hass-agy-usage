@@ -194,14 +194,14 @@ def _parse_quota_summary(raw: dict[str, Any]) -> list[dict[str, Any]]:
             rt = bucket.get("resetTime")
             if window == "weekly":
                 if rf is not None:
-                    entry["weekly_remaining"] = round(rf * 100, 1)
+                    entry["weekly_used"] = round((1 - rf) * 100, 1)
                 if rt:
                     entry["weekly_reset_time"] = rt
             elif window == "5h":
                 if rf is not None:
-                    entry["fiveh_remaining"] = round(rf * 100, 1)
+                    entry["session_used"] = round((1 - rf) * 100, 1)
                 if rt:
-                    entry["fiveh_reset_time"] = rt
+                    entry["session_reset_time"] = rt
 
         groups.append(entry)
     return groups

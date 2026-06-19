@@ -149,14 +149,14 @@ def _parse_quota_summary(raw):
             rt = bucket.get("resetTime")
             if window == "weekly":
                 if rf is not None:
-                    entry["weekly_remaining"] = round(rf * 100, 1)
+                    entry["weekly_used"] = round((1 - rf) * 100, 1)
                 if rt:
                     entry["weekly_reset_time"] = rt
             elif window == "5h":
                 if rf is not None:
-                    entry["fiveh_remaining"] = round(rf * 100, 1)
+                    entry["session_used"] = round((1 - rf) * 100, 1)
                 if rt:
-                    entry["fiveh_reset_time"] = rt
+                    entry["session_reset_time"] = rt
         groups.append(entry)
     return groups
 
@@ -183,10 +183,10 @@ async def main_with_parse():
             for g in groups:
                 print(f"\nGroup: {g['name']} (key={g['key']})")
                 for field, label_suffix, is_ts in [
-                    ("weekly_remaining", "Weekly", False),
-                    ("fiveh_remaining", "5h", False),
+                    ("weekly_used", "Weekly Usage", False),
+                    ("session_used", "Session Usage", False),
                     ("weekly_reset_time", "Weekly Reset", True),
-                    ("fiveh_reset_time", "5h Reset", True),
+                    ("session_reset_time", "Session Reset", True),
                 ]:
                     if field in g:
                         sensor_name = f"{g['name']} {label_suffix}"

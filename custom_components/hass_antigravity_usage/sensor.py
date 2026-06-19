@@ -39,14 +39,14 @@ async def async_setup_entry(
         for group in coordinator.data.get("groups", []):
             key = group["key"]
             name = group["name"]
-            if "weekly_remaining" in group:
-                entities.append(AntigravityGroupSensor(coordinator, entry, key, "weekly_remaining", f"{name} Weekly", is_timestamp=False))
-            if "fiveh_remaining" in group:
-                entities.append(AntigravityGroupSensor(coordinator, entry, key, "fiveh_remaining", f"{name} 5h", is_timestamp=False))
+            if "weekly_used" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "weekly_used", f"{name} Weekly Usage", is_timestamp=False))
+            if "session_used" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "session_used", f"{name} Session Usage", is_timestamp=False))
             if "weekly_reset_time" in group:
                 entities.append(AntigravityGroupSensor(coordinator, entry, key, "weekly_reset_time", f"{name} Weekly Reset", is_timestamp=True))
-            if "fiveh_reset_time" in group:
-                entities.append(AntigravityGroupSensor(coordinator, entry, key, "fiveh_reset_time", f"{name} 5h Reset", is_timestamp=True))
+            if "session_reset_time" in group:
+                entities.append(AntigravityGroupSensor(coordinator, entry, key, "session_reset_time", f"{name} Session Reset", is_timestamp=True))
 
     async_add_entities(entities)
 
