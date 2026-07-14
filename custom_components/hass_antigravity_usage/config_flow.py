@@ -81,7 +81,7 @@ class AntigravityUsageConfigFlow(ConfigFlow, domain=DOMAIN):
                         title_parts[-1] += ")"
                 title = " ".join(title_parts)
 
-                await self.async_set_unique_id(DOMAIN)
+                await self.async_set_unique_id(auth_file)
                 self._abort_if_unique_id_configured()
                 
                 # expiry_date is usually in ms from epoch in oauth_creds.json
